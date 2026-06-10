@@ -139,6 +139,21 @@
   .wk .w-prog > i{display:block;height:100%;background:var(--teal)}
   .wk .w-pct{font-size:10.5px;color:var(--ink-faint);font-family:var(--mono);margin-top:6px}
 
+  /* milestone breakdown rows */
+  .msr{display:grid;grid-template-columns:16px 1fr auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+  .msr:last-child{border-bottom:none}
+  .msr-head{color:var(--ink-faint);font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+  .msr-dot{width:10px;height:10px;border-radius:3px}
+  .msr-name{font-weight:600}
+  .msr-n{font-family:var(--mono);font-size:11px;color:var(--ink-dim);white-space:nowrap}
+  .msr-v{font-family:var(--mono);font-size:11.5px;color:var(--ink);font-weight:600;white-space:nowrap;text-align:right}
+  /* material boxes */
+  .matgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .matbox{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--slate);border-radius:9px;padding:11px 13px}
+  .matbox .mb-n{font-size:22px;font-weight:680;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .matbox .mb-l{font-size:12px;font-weight:600;margin-top:1px}
+  .matbox .mb-s{font-size:10.5px;color:var(--ink-faint);font-family:var(--mono);margin-top:3px}
+
   /* table */
   .tablecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-top:14px}
   .tbar{display:flex;align-items:center;justify-content:space-between;padding:14px 17px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px}
@@ -278,6 +293,9 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     idx.booking_gst=find('Booking(GST)');
     idx.invoicing=find('Invoicing');
     idx.june_target=find('June Invoicing Target');
+    idx.milestone=find('June invoicing Milestone');
+    idx.lot1=find('LOT 1 Delivery');
+    idx.lot2=find('LOT 2 Delivery');
     idx.plan_week=find('Planned Invoicing Week');
     idx.live_inv=find('Live for June (Invoicing)');
     idx.inv_pending=find('Pending');                        // first Pending (invoicing)
@@ -298,7 +316,7 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
   function validate(idx){
     const required=['sseid','status','name','capacity','invoicing','june_target','plan_week',
                     'live_inv','collection','live_coll','date_design','date_install','date_commission',
-                    'qhse','hoto','booking_month'];
+                    'qhse','hoto','booking_month','milestone','lot1','lot2'];
     return required.filter(k=>idx[k]===-1||idx[k]==null);
   }
 
@@ -328,6 +346,21 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
       else if(booking_date)stage='Booked';
       else stage='Not Started';
       const qv=cstr(row[idx.qhse]);
+      const milestone=cstr(row[idx.milestone])||'';
+      const lot1=pdate(row[idx.lot1]);
+      const lot2=pdate(row[idx.lot2]);
+      const invVal=money(row[idx.invoicing]);
+      // material delivered rule by milestone
+      const isLotMs=(milestone==='LOT 1'||milestone==='LOT 2'||milestone==='LOT 1 + 2');
+      let materialDelivered=false, materialStatus='n/a';
+      if(milestone==='LOT 1'){ materialDelivered=!!lot1; materialStatus=lot1?'delivered':'pending'; }
+      else if(milestone==='LOT 2'){ materialDelivered=!!lot2; materialStatus=lot2?'delivered':'pending'; }
+      else if(milestone==='LOT 1 + 2'){
+        if(lot1&&lot2){materialDelivered=true;materialStatus='delivered';}
+        else if(lot1||lot2){materialDelivered=false;materialStatus='partial';}
+        else {materialDelivered=false;materialStatus='pending';}
+      }
+      const grnPending = isLotMs && materialDelivered && invVal<=0;
       out.push({
         sseid,
         name:cstr(row[idx.name]),
@@ -351,6 +384,13 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
         live_june_coll:money(row[idx.live_coll]),
         june_coll_target:money(row[idx.june_coll_target]),
         plan_week:normWeek(row[idx.plan_week]),
+        milestone:milestone||'—',
+        lot1_date:lot1,
+        lot2_date:lot2,
+        is_lot_ms:isLotMs,
+        material_delivered:materialDelivered,
+        material_status:materialStatus,
+        grn_pending:grnPending,
         date_booking:booking_date,
         date_design:design,
         date_install:install,
@@ -457,6 +497,13 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
       <option value="Week-4">Week 4</option>
       <option value="unscheduled">Unscheduled</option>
     </select>
+    <select id="materialSel">
+      <option value="all">Any material state</option>
+      <option value="grn_pending">GRN pending (delivered, no invoice)</option>
+      <option value="delivered">Material fully delivered</option>
+      <option value="partial">Material partially delivered</option>
+      <option value="mat_pending">Material pending</option>
+    </select>
     <input class="search" id="search" placeholder="Search SSEID, name, city…" />
     <div class="spacer"></div>
     <button class="fbtn" id="clearBtn">Reset all</button>
@@ -498,6 +545,19 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     <div class="kpis" id="juneKpis"></div>
     <div class="section-title">June invoicing — week-wise target vs actual</div>
     <div class="weekgrid" id="weekgrid"></div>
+    <div class="section-title">Invoicing milestone &amp; material delivery</div>
+    <div class="row2">
+      <div class="card">
+        <h3>Milestone breakdown</h3>
+        <div class="hint">June-targeted projects grouped by invoicing milestone</div>
+        <div id="msBreakdown"></div>
+      </div>
+      <div class="card">
+        <h3>Material delivery (LOT 1 &amp; 2)</h3>
+        <div class="hint">For LOT-milestone projects · both LOTs delivered = all material in</div>
+        <div id="matBreakdown"></div>
+      </div>
+    </div>
     <div class="row2">
       <div class="card">
         <h3>June Invoicing — overall</h3>
@@ -569,7 +629,7 @@ window.renderDashboard = function(DATA){
   const STAGE_CLASS={Commissioned:'sp-commissioned',Installed:'sp-installed','Design Approved':'sp-design',Booked:'sp-booked','Not Started':'sp-not'};
 
   // ---------- state ----------
-  const state={view:'overview',status:'all',region:'all',month:'all',stage:'all',closure:'all',week:'all',q:'',
+  const state={view:'overview',status:'all',region:'all',month:'all',stage:'all',closure:'all',week:'all',material:'all',q:'',
     sortK:'capacity',sortDir:-1, instMonth:'all'};
 
   // ---------- populate dropdowns (idempotent) ----------
@@ -614,6 +674,10 @@ window.renderDashboard = function(DATA){
     else if(state.closure==='qhse_done') rows=rows.filter(r=>r.qhse_done);
     if(state.week==='unscheduled') rows=rows.filter(r=>!r.plan_week && (r.june_inv_target>0||r.live_june_inv>0));
     else if(state.week!=='all') rows=rows.filter(r=>r.plan_week===state.week);
+    if(state.material==='grn_pending') rows=rows.filter(r=>r.grn_pending);
+    else if(state.material==='delivered') rows=rows.filter(r=>r.material_status==='delivered');
+    else if(state.material==='partial') rows=rows.filter(r=>r.material_status==='partial');
+    else if(state.material==='mat_pending') rows=rows.filter(r=>r.is_lot_ms && r.material_status==='pending');
     if(state.q){ const q=state.q.toLowerCase();
       rows=rows.filter(r=>(r.sseid+' '+r.name+' '+r.city).toLowerCase().includes(q)); }
     return rows;
@@ -742,6 +806,38 @@ window.renderDashboard = function(DATA){
     }
     overall('juneInvOverall',tgt,act,'Invoiced');
     overall('juneCollOverall',ctgt,cact,'Collected');
+
+    // milestone breakdown — June-targeted projects by milestone
+    const targeted=rows.filter(r=>r.june_inv_target>0);
+    const MS=['Install','LOT 1','LOT 2','LOT 1 + 2'];
+    const msColor={'Install':'var(--blue)','LOT 1':'var(--amber)','LOT 2':'var(--violet)','LOT 1 + 2':'var(--teal)'};
+    let msRows=MS.map(m=>{
+      const sub=targeted.filter(r=>r.milestone===m);
+      if(!sub.length) return '';
+      const t=sum(sub,'june_inv_target'), a=sum(sub,'live_june_inv');
+      return `<div class="msr"><span class="msr-dot" style="background:${msColor[m]}"></span><span class="msr-name">${m}</span><span class="msr-n">${sub.length} proj</span><span class="msr-v">${inr(a)} / ${inr(t)}</span></div>`;
+    }).filter(Boolean);
+    const other=targeted.filter(r=>!MS.includes(r.milestone));
+    if(other.length){ msRows.push(`<div class="msr"><span class="msr-dot" style="background:var(--slate)"></span><span class="msr-name">No milestone</span><span class="msr-n">${other.length} proj</span><span class="msr-v">${inr(sum(other,'live_june_inv'))} / ${inr(sum(other,'june_inv_target'))}</span></div>`); }
+    document.getElementById('msBreakdown').innerHTML=
+      `<div class="msr msr-head"><span></span><span class="msr-name">Milestone</span><span class="msr-n">Count</span><span class="msr-v">Actual / Target</span></div>`+msRows.join('');
+
+    // material delivery breakdown — LOT-milestone projects
+    const lot=targeted.filter(r=>r.is_lot_ms);
+    const deliv=lot.filter(r=>r.material_status==='delivered');
+    const part=lot.filter(r=>r.material_status==='partial');
+    const pend=lot.filter(r=>r.material_status==='pending');
+    const grn=rows.filter(r=>r.grn_pending);
+    document.getElementById('matBreakdown').innerHTML=
+      `<div class="matgrid">
+        <div class="matbox" style="border-left-color:var(--teal)"><div class="mb-n">${deliv.length}</div><div class="mb-l">Fully delivered</div><div class="mb-s">both LOTs in</div></div>
+        <div class="matbox" style="border-left-color:var(--amber)"><div class="mb-n">${part.length}</div><div class="mb-l">Partial</div><div class="mb-s">one LOT in</div></div>
+        <div class="matbox" style="border-left-color:var(--rose)"><div class="mb-n">${pend.length}</div><div class="mb-l">Pending</div><div class="mb-s">no LOT yet</div></div>
+        <div class="matbox" style="border-left-color:var(--blue);cursor:pointer" id="grnBox"><div class="mb-n">${grn.length}</div><div class="mb-l">GRN pending</div><div class="mb-s">delivered, $0 invoiced</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:11px">${lot.length} LOT-milestone projects · click GRN pending to filter the table</div>`;
+    const gb=document.getElementById('grnBox');
+    if(gb) gb.onclick=()=>{ state.material=(state.material==='grn_pending')?'all':'grn_pending'; document.getElementById('materialSel').value=state.material; render(); };
   }
 
   // ---------- closure view ----------
@@ -807,6 +903,18 @@ window.renderDashboard = function(DATA){
     return `<span class="st ${cls}"><i></i>${v}</span>`;
   }
   function statusBadge(s){ if(s==='Installed')return'<span class="badge b-installed">Installed</span>'; if(s==='On Going')return'<span class="badge b-going">On Going</span>'; return '<span class="badge" style="background:#222;color:#888">'+s+'</span>'; }
+  function milestonePill(m){
+    if(!m||m==='—') return '<span class="muted">—</span>';
+    const c={'Install':'sp-installed','LOT 1':'sp-design','LOT 2':'sp-design','LOT 1 + 2':'sp-commissioned'}[m]||'sp-booked';
+    return `<span class="stagepill ${c}">${m}</span>`;
+  }
+  function materialPill(r){
+    if(!r.is_lot_ms) return '<span class="muted">n/a</span>';
+    if(r.grn_pending) return '<span class="st no"><i></i>GRN pending</span>';
+    if(r.material_status==='delivered') return '<span class="st ok"><i></i>Delivered</span>';
+    if(r.material_status==='partial') return '<span class="st cond"><i></i>Partial</span>';
+    return '<span class="st no"><i></i>Pending</span>';
+  }
 
   const COLSETS={
     default:[
@@ -850,10 +958,12 @@ window.renderDashboard = function(DATA){
       ['name','Name',r=>`<span class="tname" title="${r.name}">${r.name||'—'}</span>`],
       ['region','Region',r=>r.region||'—'],
       ['plan_week','Plan week',r=>r.plan_week?r.plan_week.replace('-',' '):'<span class="muted">—</span>'],
+      ['milestone','Milestone',r=>milestonePill(r.milestone)],
+      ['lot1_date','LOT 1',r=>fdate(r.lot1_date)],
+      ['lot2_date','LOT 2',r=>fdate(r.lot2_date)],
+      ['material_status','Material',r=>materialPill(r)],
       ['june_inv_target','Inv target',r=>r.june_inv_target>0?inr(r.june_inv_target):'—','num'],
       ['live_june_inv','Inv actual',r=>r.live_june_inv>0?inr(r.live_june_inv):'—','num'],
-      ['june_coll_target','Coll target',r=>r.june_coll_target>0?inr(r.june_coll_target):'—','num'],
-      ['live_june_coll','Coll actual',r=>r.live_june_coll>0?inr(r.live_june_coll):'—','num'],
     ],
   };
 
@@ -928,6 +1038,7 @@ window.renderDashboard = function(DATA){
     if(state.stage!=='all') chips.push(['Stage: '+state.stage,()=>{state.stage='all';document.getElementById('stageSel').value='all';}]);
     if(state.closure!=='all'){ const lbl={hoto_pending:'HOTO 3 pending',hoto_done:'HOTO 3 done',qhse_pending:'QHSE/PP not closed',qhse_done:'QHSE/PP closed'}[state.closure]; chips.push(['Closure: '+lbl,()=>{state.closure='all';document.getElementById('closureSel').value='all';}]); }
     if(state.week!=='all'){ const lbl=state.week==='unscheduled'?'Unscheduled':state.week.replace('-',' '); chips.push(['Plan week: '+lbl,()=>{state.week='all';document.getElementById('weekSel').value='all';}]); }
+    if(state.material!=='all'){ const lbl={grn_pending:'GRN pending',delivered:'Material delivered',partial:'Material partial',mat_pending:'Material pending'}[state.material]; chips.push([lbl,()=>{state.material='all';document.getElementById('materialSel').value='all';}]); }
     if(state.q) chips.push(['Search: "'+state.q+'"',()=>{state.q='';document.getElementById('search').value='';}]);
     const el=document.getElementById('chiprow');
     el.innerHTML=chips.map((c,i)=>`<span class="chip" data-i="${i}">${c[0]}<span class="x">✕</span></span>`).join('');
@@ -979,12 +1090,14 @@ window.renderDashboard = function(DATA){
   document.getElementById('stageSel').onchange=e=>{state.stage=e.target.value;render();};
   document.getElementById('closureSel').onchange=e=>{state.closure=e.target.value;render();};
   document.getElementById('weekSel').onchange=e=>{state.week=e.target.value;render();};
+  document.getElementById('materialSel').onchange=e=>{state.material=e.target.value;render();};
   document.getElementById('search').oninput=e=>{state.q=e.target.value;render();};
   imsel.onchange=()=>{state.instMonth=imsel.value;render();};
   document.getElementById('clearBtn').onclick=()=>{
-    Object.assign(state,{status:'all',region:'all',month:'all',stage:'all',closure:'all',week:'all',q:'',_pipe:null,_close:null});
+    Object.assign(state,{status:'all',region:'all',month:'all',stage:'all',closure:'all',week:'all',material:'all',q:'',_pipe:null,_close:null});
     rsel.value='all';msel.value='all';document.getElementById('stageSel').value='all';
-    document.getElementById('closureSel').value='all';document.getElementById('weekSel').value='all';document.getElementById('search').value='';
+    document.getElementById('closureSel').value='all';document.getElementById('weekSel').value='all';
+    document.getElementById('materialSel').value='all';document.getElementById('search').value='';
     syncStatusSeg(); render();
   };
 
