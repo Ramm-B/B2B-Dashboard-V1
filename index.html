@@ -123,6 +123,10 @@
   .reg .r-name{font-size:13px;font-weight:600}
   .reg .r-cap{font-size:22px;font-weight:650;margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
   .reg .r-sub{font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:4px}
+  .reg .r-stats{margin-top:11px;padding-top:11px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+  .reg .r-stat{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .reg .rs-l{font-size:11px;color:var(--ink-faint);font-family:var(--mono)}
+  .reg .rs-v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;font-family:var(--mono)}
 
   /* week tracker */
   .weekgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px}
@@ -661,9 +665,19 @@ window.renderDashboard = function(DATA){
   // ---------- regions ----------
   function renderRegions(rows){
     const map={};
-    rows.forEach(r=>{ const k=r.region||'-'; if(!map[k])map[k]={cap:0,n:0,coll:0}; map[k].cap+=r.capacity;map[k].n++;map[k].coll+=r.collection; });
+    rows.forEach(r=>{ const k=r.region||'-'; if(!map[k])map[k]={cap:0,n:0,coll:0,pend:0};
+      map[k].cap+=r.capacity; map[k].n++; map[k].coll+=r.collection; map[k].pend+=Math.max(r.coll_pending,0); });
     const arr=Object.entries(map).sort((a,b)=>b[1].cap-a[1].cap);
-    document.getElementById('regions').innerHTML=arr.map(([k,v])=>`<div class="reg"><div class="r-name">${k==='-'?'Unspecified':k}</div><div class="r-cap">${num(v.cap,1)}<span style="font-size:12px;color:var(--ink-faint)"> kWp</span></div><div class="r-sub">${v.n} projects · ${inr(v.coll)} collected</div></div>`).join('');
+    document.getElementById('regions').innerHTML=arr.map(([k,v])=>
+      `<div class="reg">
+        <div class="r-name">${k==='-'?'Unspecified':k}</div>
+        <div class="r-cap">${num(v.cap,1)}<span style="font-size:12px;color:var(--ink-faint)"> kWp</span></div>
+        <div class="r-stats">
+          <div class="r-stat"><span class="rs-l">Collected</span><span class="rs-v" style="color:var(--green)">${inr(v.coll)}</span></div>
+          <div class="r-stat"><span class="rs-l">Pending</span><span class="rs-v" style="color:var(--rose)">${inr(v.pend)}</span></div>
+          <div class="r-stat"><span class="rs-l">Projects</span><span class="rs-v">${v.n}</span></div>
+        </div>
+      </div>`).join('');
   }
 
   // ---------- pipeline quad ----------
