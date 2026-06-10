@@ -445,6 +445,14 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
       <option value="qhse_pending">QHSE/PP not closed</option>
       <option value="qhse_done">QHSE/PP closed</option>
     </select>
+    <select id="weekSel">
+      <option value="all">Any plan week</option>
+      <option value="Week-1">Week 1</option>
+      <option value="Week-2">Week 2</option>
+      <option value="Week-3">Week 3</option>
+      <option value="Week-4">Week 4</option>
+      <option value="unscheduled">Unscheduled</option>
+    </select>
     <input class="search" id="search" placeholder="Search SSEID, name, city…" />
     <div class="spacer"></div>
     <button class="fbtn" id="clearBtn">Reset all</button>
@@ -557,7 +565,7 @@ window.renderDashboard = function(DATA){
   const STAGE_CLASS={Commissioned:'sp-commissioned',Installed:'sp-installed','Design Approved':'sp-design',Booked:'sp-booked','Not Started':'sp-not'};
 
   // ---------- state ----------
-  const state={view:'overview',status:'all',region:'all',month:'all',stage:'all',closure:'all',q:'',
+  const state={view:'overview',status:'all',region:'all',month:'all',stage:'all',closure:'all',week:'all',q:'',
     sortK:'capacity',sortDir:-1, instMonth:'all'};
 
   // ---------- populate dropdowns (idempotent) ----------
@@ -600,6 +608,8 @@ window.renderDashboard = function(DATA){
     else if(state.closure==='hoto_done') rows=rows.filter(r=>r.hoto_done);
     else if(state.closure==='qhse_pending') rows=rows.filter(r=>!r.qhse_done);
     else if(state.closure==='qhse_done') rows=rows.filter(r=>r.qhse_done);
+    if(state.week==='unscheduled') rows=rows.filter(r=>!r.plan_week && (r.june_inv_target>0||r.live_june_inv>0));
+    else if(state.week!=='all') rows=rows.filter(r=>r.plan_week===state.week);
     if(state.q){ const q=state.q.toLowerCase();
       rows=rows.filter(r=>(r.sseid+' '+r.name+' '+r.city).toLowerCase().includes(q)); }
     return rows;
@@ -697,13 +707,19 @@ window.renderDashboard = function(DATA){
       const sub=rows.filter(r=>r.plan_week===wk);
       const wt=sum(sub,'june_inv_target'), wa=sum(sub,'live_june_inv');
       const wp=wt>0?Math.min(wa/wt*100,100):0;
-      return `<div class="wk"><div class="w-h">${wk.replace('-',' ')}<small>${sub.length} proj</small></div><div class="w-act">${inr(wa)}</div><div class="w-tgt">of ${inr(wt)} target</div><div class="w-prog"><i style="width:${wp}%"></i></div><div class="w-pct">${wt>0?Math.round(wa/wt*100)+'% achieved':'no target'}</div></div>`;
+      const pressed=state.week===wk?' style="border-color:var(--amber);background:var(--amber-soft)"':'';
+      return `<div class="wk" data-week="${wk}"${pressed} title="Click to see ${wk.replace('-',' ')} projects">${'<div class="w-h">'+wk.replace('-',' ')+'<small>'+sub.length+' proj</small></div>'}<div class="w-act">${inr(wa)}</div><div class="w-tgt">of ${inr(wt)} target</div><div class="w-prog"><i style="width:${wp}%"></i></div><div class="w-pct">${wt>0?Math.round(wa/wt*100)+'% achieved':'no target'}</div></div>`;
     });
     // unscheduled (target but no week)
     const noWk=rows.filter(r=>!r.plan_week && r.june_inv_target>0);
     const nt=sum(noWk,'june_inv_target'), na=sum(noWk,'live_june_inv');
-    grid.push(`<div class="wk" style="border-style:dashed"><div class="w-h">Unscheduled<small>${noWk.length} proj</small></div><div class="w-act">${inr(na)}</div><div class="w-tgt">of ${inr(nt)} target</div><div class="w-prog"><i style="width:${nt>0?Math.min(na/nt*100,100):0}%"></i></div><div class="w-pct">no week assigned</div></div>`);
+    const upr=state.week==='unscheduled'?' style="border-color:var(--amber);background:var(--amber-soft);border-style:dashed"':' style="border-style:dashed"';
+    grid.push(`<div class="wk" data-week="unscheduled"${upr} title="Click to see unscheduled projects"><div class="w-h">Unscheduled<small>${noWk.length} proj</small></div><div class="w-act">${inr(na)}</div><div class="w-tgt">of ${inr(nt)} target</div><div class="w-prog"><i style="width:${nt>0?Math.min(na/nt*100,100):0}%"></i></div><div class="w-pct">no week assigned</div></div>`);
     document.getElementById('weekgrid').innerHTML=grid.join('');
+    document.querySelectorAll('#weekgrid .wk').forEach(el=>{el.style.cursor='pointer';el.onclick=()=>{
+      const w=el.dataset.week; state.week=(state.week===w)?'all':w;
+      document.getElementById('weekSel').value=state.week; render();
+    };});
 
     function overall(elId,tgt,act,label){
       const p=tgt>0?(act/tgt*100):0, pc=Math.min(p,100), gap=Math.max(tgt-act,0);
@@ -880,7 +896,11 @@ window.renderDashboard = function(DATA){
   function tableTitle(){
     if(state.view==='pipeline'){ const m={dip:'Design approved · install pending',dap:'Design approval pending',icp:'Installed · commissioning pending',tcp:'Total commissioning pending'}; return state._pipe?m[state._pipe]:'All active projects'; }
     if(state.view==='closure'){ const m={qhse:'QHSE/PP not closed',hoto:'HOTO 3 pending',either:'Any closure pending'}; return state._close?m[state._close]:'Commissioned — any closure pending'; }
-    if(state.view==='june') return 'June targeted projects';
+    if(state.view==='june'){
+      if(state.week==='unscheduled') return 'Unscheduled June projects';
+      if(state.week!=='all') return state.week.replace('-',' ')+' — planned projects';
+      return 'June targeted projects';
+    }
     if(state.view==='month') return 'Installed in selected month';
     return 'All projects';
   }
@@ -893,6 +913,7 @@ window.renderDashboard = function(DATA){
     if(state.month!=='all') chips.push(['Booking month: '+state.month,()=>{state.month='all';msel.value='all';}]);
     if(state.stage!=='all') chips.push(['Stage: '+state.stage,()=>{state.stage='all';document.getElementById('stageSel').value='all';}]);
     if(state.closure!=='all'){ const lbl={hoto_pending:'HOTO 3 pending',hoto_done:'HOTO 3 done',qhse_pending:'QHSE/PP not closed',qhse_done:'QHSE/PP closed'}[state.closure]; chips.push(['Closure: '+lbl,()=>{state.closure='all';document.getElementById('closureSel').value='all';}]); }
+    if(state.week!=='all'){ const lbl=state.week==='unscheduled'?'Unscheduled':state.week.replace('-',' '); chips.push(['Plan week: '+lbl,()=>{state.week='all';document.getElementById('weekSel').value='all';}]); }
     if(state.q) chips.push(['Search: "'+state.q+'"',()=>{state.q='';document.getElementById('search').value='';}]);
     const el=document.getElementById('chiprow');
     el.innerHTML=chips.map((c,i)=>`<span class="chip" data-i="${i}">${c[0]}<span class="x">✕</span></span>`).join('');
@@ -943,12 +964,13 @@ window.renderDashboard = function(DATA){
   msel.onchange=()=>{state.month=msel.value;render();};
   document.getElementById('stageSel').onchange=e=>{state.stage=e.target.value;render();};
   document.getElementById('closureSel').onchange=e=>{state.closure=e.target.value;render();};
+  document.getElementById('weekSel').onchange=e=>{state.week=e.target.value;render();};
   document.getElementById('search').oninput=e=>{state.q=e.target.value;render();};
   imsel.onchange=()=>{state.instMonth=imsel.value;render();};
   document.getElementById('clearBtn').onclick=()=>{
-    Object.assign(state,{status:'all',region:'all',month:'all',stage:'all',closure:'all',q:'',_pipe:null,_close:null});
+    Object.assign(state,{status:'all',region:'all',month:'all',stage:'all',closure:'all',week:'all',q:'',_pipe:null,_close:null});
     rsel.value='all';msel.value='all';document.getElementById('stageSel').value='all';
-    document.getElementById('closureSel').value='all';document.getElementById('search').value='';
+    document.getElementById('closureSel').value='all';document.getElementById('weekSel').value='all';document.getElementById('search').value='';
     syncStatusSeg(); render();
   };
 
