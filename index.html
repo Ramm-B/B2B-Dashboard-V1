@@ -153,6 +153,9 @@
   .matbox .mb-n{font-size:22px;font-weight:680;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
   .matbox .mb-l{font-size:12px;font-weight:600;margin-top:1px}
   .matbox .mb-s{font-size:10.5px;color:var(--ink-faint);font-family:var(--mono);margin-top:3px}
+  .matbox{transition:.15s}
+  .matbox:hover{background:var(--panel);transform:translateY(-1px)}
+  .matbox.mat-on{background:var(--amber-soft);border-color:var(--amber)}
 
   /* table */
   .tablecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-top:14px}
@@ -350,7 +353,8 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
       const lot1=pdate(row[idx.lot1]);
       const lot2=pdate(row[idx.lot2]);
       const invVal=money(row[idx.invoicing]);
-      // material delivered rule by milestone
+      const juneInvActual=money(row[idx.live_inv]);
+      // material delivered rule by milestone (overall, any month)
       const isLotMs=(milestone==='LOT 1'||milestone==='LOT 2'||milestone==='LOT 1 + 2');
       let materialDelivered=false, materialStatus='n/a';
       if(milestone==='LOT 1'){ materialDelivered=!!lot1; materialStatus=lot1?'delivered':'pending'; }
@@ -360,7 +364,12 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
         else if(lot1||lot2){materialDelivered=false;materialStatus='partial';}
         else {materialDelivered=false;materialStatus='pending';}
       }
-      const grnPending = isLotMs && materialDelivered && invVal<=0;
+      // June-specific: was any LOT delivered in June 2026?
+      function isJune(d){ return d && d.slice(0,7)==='2026-06'; }
+      const deliveredInJune = isLotMs && (isJune(lot1)||isJune(lot2));
+      // GRN pending = delivered in June AND June invoicing actual = 0
+      const grnPending = deliveredInJune && juneInvActual<=0;
+      const grnDone = deliveredInJune && juneInvActual>0;
       out.push({
         sseid,
         name:cstr(row[idx.name]),
@@ -390,7 +399,9 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
         is_lot_ms:isLotMs,
         material_delivered:materialDelivered,
         material_status:materialStatus,
+        delivered_in_june:deliveredInJune,
         grn_pending:grnPending,
+        grn_done:grnDone,
         date_booking:booking_date,
         date_design:design,
         date_install:install,
@@ -499,7 +510,9 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     </select>
     <select id="materialSel">
       <option value="all">Any material state</option>
-      <option value="grn_pending">GRN pending (delivered, no invoice)</option>
+      <option value="grn_pending">GRN pending (June delivery, no June invoice)</option>
+      <option value="grn_done">GRN done (June delivery, invoiced)</option>
+      <option value="delivered_june">Delivered in June</option>
       <option value="delivered">Material fully delivered</option>
       <option value="partial">Material partially delivered</option>
       <option value="mat_pending">Material pending</option>
@@ -675,9 +688,11 @@ window.renderDashboard = function(DATA){
     if(state.week==='unscheduled') rows=rows.filter(r=>!r.plan_week && (r.june_inv_target>0||r.live_june_inv>0));
     else if(state.week!=='all') rows=rows.filter(r=>r.plan_week===state.week);
     if(state.material==='grn_pending') rows=rows.filter(r=>r.grn_pending);
-    else if(state.material==='delivered') rows=rows.filter(r=>r.material_status==='delivered');
-    else if(state.material==='partial') rows=rows.filter(r=>r.material_status==='partial');
-    else if(state.material==='mat_pending') rows=rows.filter(r=>r.is_lot_ms && r.material_status==='pending');
+    else if(state.material==='grn_done') rows=rows.filter(r=>r.grn_done);
+    else if(state.material==='delivered_june') rows=rows.filter(r=>r.delivered_in_june);
+    else if(state.material==='mat_pending') rows=rows.filter(r=>r.is_lot_ms && r.material_status==='pending' && r.june_inv_target>0);
+    else if(state.material==='delivered') rows=rows.filter(r=>r.is_lot_ms && r.material_status==='delivered' && r.june_inv_target>0);
+    else if(state.material==='partial') rows=rows.filter(r=>r.is_lot_ms && r.material_status==='partial' && r.june_inv_target>0);
     if(state.q){ const q=state.q.toLowerCase();
       rows=rows.filter(r=>(r.sseid+' '+r.name+' '+r.city).toLowerCase().includes(q)); }
     return rows;
@@ -827,17 +842,28 @@ window.renderDashboard = function(DATA){
     const deliv=lot.filter(r=>r.material_status==='delivered');
     const part=lot.filter(r=>r.material_status==='partial');
     const pend=lot.filter(r=>r.material_status==='pending');
+    const juneDeliv=rows.filter(r=>r.delivered_in_june);
     const grn=rows.filter(r=>r.grn_pending);
+    const grnDone=rows.filter(r=>r.grn_done);
+    function matSel(k){ const map={delivered:'delivered',partial:'partial',pending:'mat_pending',junedeliv:'delivered_june',grn:'grn_pending',grndone:'grn_done'}; return state.material===map[k]?' mat-on':''; }
     document.getElementById('matBreakdown').innerHTML=
       `<div class="matgrid">
-        <div class="matbox" style="border-left-color:var(--teal)"><div class="mb-n">${deliv.length}</div><div class="mb-l">Fully delivered</div><div class="mb-s">both LOTs in</div></div>
-        <div class="matbox" style="border-left-color:var(--amber)"><div class="mb-n">${part.length}</div><div class="mb-l">Partial</div><div class="mb-s">one LOT in</div></div>
-        <div class="matbox" style="border-left-color:var(--rose)"><div class="mb-n">${pend.length}</div><div class="mb-l">Pending</div><div class="mb-s">no LOT yet</div></div>
-        <div class="matbox" style="border-left-color:var(--blue);cursor:pointer" id="grnBox"><div class="mb-n">${grn.length}</div><div class="mb-l">GRN pending</div><div class="mb-s">delivered, $0 invoiced</div></div>
+        <div class="matbox${matSel('delivered')}" style="border-left-color:var(--teal)" data-mat="delivered"><div class="mb-n">${deliv.length}</div><div class="mb-l">Fully delivered</div><div class="mb-s">both LOTs in (overall)</div></div>
+        <div class="matbox${matSel('partial')}" style="border-left-color:var(--amber)" data-mat="partial"><div class="mb-n">${part.length}</div><div class="mb-l">Partial</div><div class="mb-s">one LOT in</div></div>
+        <div class="matbox${matSel('pending')}" style="border-left-color:var(--rose)" data-mat="pending"><div class="mb-n">${pend.length}</div><div class="mb-l">Pending</div><div class="mb-s">no LOT yet</div></div>
+        <div class="matbox${matSel('junedeliv')}" style="border-left-color:var(--violet)" data-mat="junedeliv"><div class="mb-n">${juneDeliv.length}</div><div class="mb-l">Delivered in June</div><div class="mb-s">a LOT moved this month</div></div>
       </div>
-      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:11px">${lot.length} LOT-milestone projects · click GRN pending to filter the table</div>`;
-    const gb=document.getElementById('grnBox');
-    if(gb) gb.onclick=()=>{ state.material=(state.material==='grn_pending')?'all':'grn_pending'; document.getElementById('materialSel').value=state.material; render(); };
+      <div class="matgrid" style="margin-top:10px">
+        <div class="matbox${matSel('grn')}" style="border-left-color:var(--rose);background:var(--rose-soft)" data-mat="grn"><div class="mb-n">${grn.length}</div><div class="mb-l">GRN pending</div><div class="mb-s">June delivery, ₹0 June invoice</div></div>
+        <div class="matbox${matSel('grndone')}" style="border-left-color:var(--green)" data-mat="grndone"><div class="mb-n">${grnDone.length}</div><div class="mb-l">GRN done</div><div class="mb-s">June delivery, invoiced in June</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:11px">${juneDeliv.length} projects had material delivered in June · click any box to filter</div>`;
+    const matMap={delivered:'delivered',partial:'partial',pending:'mat_pending',junedeliv:'delivered_june',grn:'grn_pending',grndone:'grn_done'};
+    document.querySelectorAll('#matBreakdown .matbox').forEach(el=>{ el.style.cursor='pointer'; el.onclick=()=>{
+      const target=matMap[el.dataset.mat];
+      state.material=(state.material===target)?'all':target;
+      document.getElementById('materialSel').value=state.material; render();
+    };});
   }
 
   // ---------- closure view ----------
@@ -911,6 +937,7 @@ window.renderDashboard = function(DATA){
   function materialPill(r){
     if(!r.is_lot_ms) return '<span class="muted">n/a</span>';
     if(r.grn_pending) return '<span class="st no"><i></i>GRN pending</span>';
+    if(r.grn_done) return '<span class="st ok"><i></i>GRN done</span>';
     if(r.material_status==='delivered') return '<span class="st ok"><i></i>Delivered</span>';
     if(r.material_status==='partial') return '<span class="st cond"><i></i>Partial</span>';
     return '<span class="st no"><i></i>Pending</span>';
@@ -1038,7 +1065,7 @@ window.renderDashboard = function(DATA){
     if(state.stage!=='all') chips.push(['Stage: '+state.stage,()=>{state.stage='all';document.getElementById('stageSel').value='all';}]);
     if(state.closure!=='all'){ const lbl={hoto_pending:'HOTO 3 pending',hoto_done:'HOTO 3 done',qhse_pending:'QHSE/PP not closed',qhse_done:'QHSE/PP closed'}[state.closure]; chips.push(['Closure: '+lbl,()=>{state.closure='all';document.getElementById('closureSel').value='all';}]); }
     if(state.week!=='all'){ const lbl=state.week==='unscheduled'?'Unscheduled':state.week.replace('-',' '); chips.push(['Plan week: '+lbl,()=>{state.week='all';document.getElementById('weekSel').value='all';}]); }
-    if(state.material!=='all'){ const lbl={grn_pending:'GRN pending',delivered:'Material delivered',partial:'Material partial',mat_pending:'Material pending'}[state.material]; chips.push([lbl,()=>{state.material='all';document.getElementById('materialSel').value='all';}]); }
+    if(state.material!=='all'){ const lbl={grn_pending:'GRN pending',grn_done:'GRN done',delivered_june:'Delivered in June',delivered:'Material delivered',partial:'Material partial',mat_pending:'Material pending'}[state.material]; chips.push([lbl,()=>{state.material='all';document.getElementById('materialSel').value='all';}]); }
     if(state.q) chips.push(['Search: "'+state.q+'"',()=>{state.q='';document.getElementById('search').value='';}]);
     const el=document.getElementById('chiprow');
     el.innerHTML=chips.map((c,i)=>`<span class="chip" data-i="${i}">${c[0]}<span class="x">✕</span></span>`).join('');
