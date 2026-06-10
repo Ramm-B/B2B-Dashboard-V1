@@ -1036,7 +1036,8 @@ window.renderDashboard = function(DATA){
     }
     if(state.view==='june'){
       // default: show projects with a june target or actual
-      rows = rows.filter(r=>r.june_inv_target>0 || r.live_june_inv>0 || r.june_coll_target>0 || r.live_june_coll>0);
+      // "planned in June" = has a June invoicing target OR a milestone set
+      rows = rows.filter(r=>r.june_inv_target>0 || (r.milestone && r.milestone!=='—'));
     }
     if(state.view==='month'){
       rows = renderMonth();
@@ -1050,7 +1051,7 @@ window.renderDashboard = function(DATA){
     if(state.view==='june'){
       if(state.week==='unscheduled') return 'Unscheduled June projects';
       if(state.week!=='all') return state.week.replace('-',' ')+' — planned projects';
-      return 'June targeted projects';
+      return 'June planned projects';
     }
     if(state.view==='month') return 'Installed in selected month';
     return 'All projects';
