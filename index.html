@@ -172,6 +172,13 @@
   .matbox .mb-n{font-size:22px;font-weight:680;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
   .matbox .mb-l{font-size:12px;font-weight:600;margin-top:1px}
   .matbox .mb-s{font-size:10.5px;color:var(--ink-faint);font-family:var(--mono);margin-top:3px}
+  /* W-o-W table */
+  .wowtab{font-size:12px}
+  .wowtab th{font-size:10px;padding:7px 10px;text-transform:none;letter-spacing:0}
+  .wowtab td{padding:9px 10px;font-family:var(--mono)}
+  .wowtab tbody tr:hover{background:transparent}
+  /* PM cell */
+  .pmcell{font-size:11.5px;color:var(--ink-dim);white-space:nowrap}
   .matbox{transition:.15s}
   .matbox:hover{background:var(--panel);transform:translateY(-1px)}
   .matbox.mat-on{background:var(--amber-soft);border-color:var(--amber)}
@@ -333,6 +340,8 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     idx.date_commission=find('Commission');
     idx.qhse=find('QHSE_Final Audit_PP');
     idx.hoto=find('HOTO 3 date');
+    idx.hoto2=find('HOTO 2 date');
+    idx.pm=find('Project Manager');
     idx.date_booking=find('Booking', idx.invoicing+1);      // second Booking = booking date
     return idx;
   }
@@ -430,6 +439,8 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
         qhse_done:qhseDone(qv),
         hoto_date:hoto,
         hoto_done:!!hoto,
+        pm:cstr(row[idx.pm])||'Unassigned',
+        is_planned_june:(money(row[idx.june_target])>0 || isLotMs || milestone==='Install'),
         stage
       });
     }
@@ -508,6 +519,7 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
       <button data-status="On Going">On Going</button>
     </div>
     <select id="regionSel"><option value="all">All regions</option></select>
+    <select id="pmSel"><option value="all">All PMs</option></select>
     <select id="monthSel"><option value="all">All booking months</option></select>
     <select id="stageSel">
       <option value="all">All stages</option>
@@ -582,6 +594,8 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     <div class="kpis" id="juneKpis"></div>
     <div class="section-title">June invoicing — week-wise target vs actual</div>
     <div class="weekgrid" id="weekgrid"></div>
+    <div class="section-title">Week-over-week summary — target vs achieved</div>
+    <div id="wowSummary"></div>
     <div class="section-title">Invoicing milestone &amp; material delivery</div>
     <div class="row2">
       <div class="card">
@@ -595,6 +609,8 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
         <div id="matBreakdown"></div>
       </div>
     </div>
+    <div class="section-title">Unplanned invoicing — done in June, not planned</div>
+    <div class="card" id="unplannedCard"></div>
     <div class="row2">
       <div class="card">
         <h3>June Invoicing — overall</h3>
@@ -666,7 +682,7 @@ window.renderDashboard = function(DATA){
   const STAGE_CLASS={Commissioned:'sp-commissioned',Installed:'sp-installed','Design Approved':'sp-design',Booked:'sp-booked','Not Started':'sp-not'};
 
   // ---------- state ----------
-  const state={view:'overview',status:'all',region:'all',month:'all',stage:'all',closure:'all',week:'all',material:'all',q:'',
+  const state={view:'overview',status:'all',region:'all',pm:'all',month:'all',stage:'all',closure:'all',week:'all',material:'all',q:'',
     sortK:'capacity',sortDir:-1, instMonth:'all'};
 
   // ---------- populate dropdowns (idempotent) ----------
@@ -674,6 +690,14 @@ window.renderDashboard = function(DATA){
   const rsel=document.getElementById('regionSel');
   rsel.innerHTML='<option value="all">All regions</option>';
   regions.forEach(rg=>{const o=document.createElement('option');o.value=rg;o.textContent=rg;rsel.appendChild(o);});
+
+  // PMs sorted by project count (active set)
+  const pmCount={};
+  baseSet().forEach(r=>{ pmCount[r.pm]=(pmCount[r.pm]||0)+1; });
+  const pms=Object.keys(pmCount).sort((a,b)=>{ if(a==='Unassigned')return 1; if(b==='Unassigned')return -1; return pmCount[b]-pmCount[a]; });
+  const pmsel=document.getElementById('pmSel');
+  pmsel.innerHTML='<option value="all">All PMs</option>';
+  pms.forEach(pm=>{const o=document.createElement('option');o.value=pm;o.textContent=pm+' ('+pmCount[pm]+')';pmsel.appendChild(o);});
 
   // months sorted by key
   const mkmap={};
@@ -703,6 +727,7 @@ window.renderDashboard = function(DATA){
     let rows=baseSet();
     if(state.status!=='all') rows=rows.filter(r=>r.status===state.status);
     if(state.region!=='all') rows=rows.filter(r=>r.region===state.region);
+    if(state.pm!=='all') rows=rows.filter(r=>r.pm===state.pm);
     if(state.month!=='all') rows=rows.filter(r=>r.booking_month===state.month);
     if(state.stage!=='all') rows=rows.filter(r=>r.stage===state.stage);
     if(state.closure==='hoto_pending') rows=rows.filter(r=>!r.hoto_done);
@@ -712,6 +737,7 @@ window.renderDashboard = function(DATA){
     if(state.week==='unscheduled') rows=rows.filter(r=>!r.plan_week && (r.june_inv_target>0||r.live_june_inv>0));
     else if(state.week!=='all') rows=rows.filter(r=>r.plan_week===state.week);
     if(state.material==='grn_pending') rows=rows.filter(r=>r.grn_pending);
+    else if(state.material==='unplanned') rows=rows.filter(r=>r.live_june_inv>0 && !r.is_planned_june);
     else if(state.material==='grn_done') rows=rows.filter(r=>r.grn_done);
     else if(state.material==='delivered_june') rows=rows.filter(r=>r.delivered_in_june);
     else if(state.material==='mat_pending') rows=rows.filter(r=>r.is_lot_ms && r.material_status==='pending' && r.june_inv_target>0);
@@ -846,6 +872,37 @@ window.renderDashboard = function(DATA){
     overall('juneInvOverall',tgt,act,'Invoiced');
     overall('juneCollOverall',ctgt,cact,'Collected');
 
+    // ---- W-o-W summary table ----
+    function deltaCell(d){ const neg=d<0; return `<td class="num" style="${neg?'background:var(--rose-soft);color:var(--rose);font-weight:600':'color:var(--green)'}">${neg?'':'+'}${inr(d)}</td>`; }
+    let invW={}, invTotT=0, invTotA=0;
+    WEEKS.forEach(wk=>{ const s=rows.filter(r=>r.plan_week===wk); const wt=sum(s,'june_inv_target'),wa=sum(s,'live_june_inv'); invW[wk]={t:wt,a:wa}; invTotT+=wt; invTotA+=wa; });
+    const collTt=sum(rows,'june_coll_target'), collAa=sum(rows,'live_june_coll');
+    const invHead=`<tr><th></th>${WEEKS.map(w=>`<th colspan="3" style="text-align:center;border-left:1px solid var(--line)">${w.replace('-',' ')}</th>`).join('')}<th colspan="3" style="text-align:center;border-left:2px solid var(--amber)">MTD total</th></tr>`;
+    const subHead=`<tr><th></th>${WEEKS.map(()=>`<th class="num" style="border-left:1px solid var(--line)">Tgt</th><th class="num">Ach</th><th class="num">Δ</th>`).join('')}<th class="num" style="border-left:2px solid var(--amber)">Tgt</th><th class="num">Ach</th><th class="num">Δ</th></tr>`;
+    const invRow=`<tr><td style="font-weight:600">Invoicing</td>${WEEKS.map(w=>{const x=invW[w];return `<td class="num" style="border-left:1px solid var(--line)">${inr(x.t)}</td><td class="num">${inr(x.a)}</td>`+deltaCell(x.a-x.t);}).join('')}<td class="num" style="border-left:2px solid var(--amber)">${inr(invTotT)}</td><td class="num">${inr(invTotA)}</td>`+deltaCell(invTotA-invTotT)+`</tr>`;
+    document.getElementById('wowSummary').innerHTML=
+      `<div class="kpis" style="margin-bottom:14px">
+        ${kpiCard('Invoicing MTD','<span style="font-size:18px">'+inr(invTotA)+' / '+inr(invTotT)+'</span>',(invTotT>0?Math.round(invTotA/invTotT*100):0)+'% achieved · Δ '+inr(invTotA-invTotT),'a-amber')}
+        ${kpiCard('Collection MTD','<span style="font-size:18px">'+inr(collAa)+' / '+inr(collTt)+'</span>',(collTt>0?Math.round(collAa/collTt*100):0)+'% achieved · Δ '+inr(collAa-collTt),'a-green')}
+      </div>
+      <div class="tablecard"><div class="tscroll"><table class="wowtab"><thead>${invHead}${subHead}</thead><tbody>${invRow}</tbody></table></div></div>
+      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:8px">Weekly target from each project's planned invoicing week. Collection has no weekly targets in the sheet, so it's shown as MTD only above. Negative deltas (behind target) in red.</div>`;
+
+    // ---- unplanned invoicing ----
+    const unpl=rows.filter(r=>r.live_june_inv>0 && !r.is_planned_june);
+    const upT=sum(unpl,'live_june_inv');
+    const pressed=state.material==='unplanned';
+    document.getElementById('unplannedCard').innerHTML=
+      `<h3>Unplanned invoicing <span style="font-family:var(--mono);font-size:12px;color:var(--ink-faint);font-weight:400">— invoiced in June with no target/milestone</span></h3>
+       <div style="display:flex;gap:22px;align-items:baseline;flex-wrap:wrap;margin:12px 0 14px">
+         <div><span style="font-size:28px;font-weight:680;letter-spacing:-.02em">${unpl.length}</span> <span style="color:var(--ink-dim);font-size:13px">projects</span></div>
+         <div><span style="font-size:22px;font-weight:650">${inr(upT)}</span> <span style="color:var(--ink-dim);font-size:13px">invoiced</span></div>
+         <button class="fbtn" id="unplannedBtn" style="${pressed?'border-color:var(--amber);color:var(--amber)':''}">${pressed?'✓ Filtering table below':'Show in table below →'}</button>
+       </div>
+       ${unpl.length?`<div class="tablecard"><div class="tscroll" style="max-height:280px"><table><thead><tr><th>SSEID</th><th>Name</th><th>Region</th><th>PM</th><th class="num">June invoiced</th></tr></thead><tbody>${unpl.slice().sort((a,b)=>b.live_june_inv-a.live_june_inv).map(r=>`<tr><td class="tid">${r.sseid}</td><td class="tname" title="${r.name}">${r.name}</td><td>${r.region}</td><td>${r.pm==='Unassigned'?'<span class="muted">Unassigned</span>':r.pm}</td><td class="num">${inr(r.live_june_inv)}</td></tr>`).join('')}</tbody></table></div></div>`:'<div style="color:var(--ink-faint);font-family:var(--mono);font-size:12px">No unplanned invoicing in June.</div>'}`;
+    const ub=document.getElementById('unplannedBtn');
+    if(ub) ub.onclick=()=>{ state.material=(state.material==='unplanned')?'all':'unplanned'; document.getElementById('materialSel').value='all'; render(); };
+
     // milestone breakdown — June-targeted projects by milestone
     const targeted=rows.filter(r=>r.june_inv_target>0);
     const MS=['Install','LOT 1','LOT 2','LOT 1 + 2'];
@@ -967,12 +1024,14 @@ window.renderDashboard = function(DATA){
     return '<span class="st no"><i></i>Pending</span>';
   }
 
+  const pmCol=['pm','PM',r=>r.pm==='Unassigned'?'<span class="muted">Unassigned</span>':`<span class="pmcell">${r.pm}</span>`];
   const COLSETS={
     default:[
       ['sseid','SSEID',r=>`<span class="tid">${r.sseid}</span>`],
       ['name','Name',r=>`<span class="tname" title="${r.name}">${r.name||'—'}</span>`],
       ['status','Status',r=>statusBadge(r.status)],
       ['region','Region',r=>r.region||'—'],
+      pmCol,
       ['capacity','kWp',r=>num(r.capacity,1),'num'],
       ['stage','Stage',r=>`<span class="stagepill ${STAGE_CLASS[r.stage]}">${r.stage}</span>`],
       ['date_design','Design',r=>fdate(r.date_design)],
@@ -985,6 +1044,7 @@ window.renderDashboard = function(DATA){
       ['sseid','SSEID',r=>`<span class="tid">${r.sseid}</span>`],
       ['name','Name',r=>`<span class="tname" title="${r.name}">${r.name||'—'}</span>`],
       ['region','Region',r=>r.region||'—'],
+      pmCol,
       ['capacity','kWp',r=>num(r.capacity,1),'num'],
       ['date_install','Install',r=>fdate(r.date_install)],
       ['invoicing','Invoiced',r=>inr(r.invoicing),'num'],
@@ -998,6 +1058,7 @@ window.renderDashboard = function(DATA){
       ['sseid','SSEID',r=>`<span class="tid">${r.sseid}</span>`],
       ['name','Name',r=>`<span class="tname" title="${r.name}">${r.name||'—'}</span>`],
       ['region','Region',r=>r.region||'—'],
+      pmCol,
       ['capacity','kWp',r=>num(r.capacity,1),'num'],
       ['date_commission','Commission',r=>fdate(r.date_commission)],
       ['qhse_done','QHSE/PP',r=>qhseCell(r)],
@@ -1008,6 +1069,7 @@ window.renderDashboard = function(DATA){
       ['sseid','SSEID',r=>`<span class="tid">${r.sseid}</span>`],
       ['name','Name',r=>`<span class="tname" title="${r.name}">${r.name||'—'}</span>`],
       ['region','Region',r=>r.region||'—'],
+      pmCol,
       ['plan_week','Plan week',r=>r.plan_week?r.plan_week.replace('-',' '):'<span class="muted">—</span>'],
       ['milestone','Milestone',r=>milestonePill(r.milestone)],
       ['lot1_date','LOT 1',r=>fdate(r.lot1_date)],
@@ -1059,9 +1121,12 @@ window.renderDashboard = function(DATA){
       else rows = s.either; // default to actionable set
     }
     if(state.view==='june'){
-      // default: show projects with a june target or actual
-      // "planned in June" = has a June invoicing target OR a milestone set
-      rows = rows.filter(r=>r.june_inv_target>0 || (r.milestone && r.milestone!=='—'));
+      if(state.material==='unplanned'){
+        rows = rows.filter(r=>r.live_june_inv>0 && !r.is_planned_june);
+      } else {
+        // "planned in June" = has a June invoicing target OR a milestone set
+        rows = rows.filter(r=>r.june_inv_target>0 || (r.milestone && r.milestone!=='—'));
+      }
     }
     if(state.view==='month'){
       rows = renderMonth();
@@ -1086,11 +1151,12 @@ window.renderDashboard = function(DATA){
     const chips=[];
     if(state.status!=='all') chips.push(['Status: '+state.status,()=>{state.status='all';syncStatusSeg();}]);
     if(state.region!=='all') chips.push(['Region: '+state.region,()=>{state.region='all';rsel.value='all';}]);
+    if(state.pm!=='all') chips.push(['PM: '+state.pm,()=>{state.pm='all';pmsel.value='all';}]);
     if(state.month!=='all') chips.push(['Booking month: '+state.month,()=>{state.month='all';msel.value='all';}]);
     if(state.stage!=='all') chips.push(['Stage: '+state.stage,()=>{state.stage='all';document.getElementById('stageSel').value='all';}]);
     if(state.closure!=='all'){ const lbl={hoto_pending:'HOTO 3 pending',hoto_done:'HOTO 3 done',qhse_pending:'QHSE/PP not closed',qhse_done:'QHSE/PP closed'}[state.closure]; chips.push(['Closure: '+lbl,()=>{state.closure='all';document.getElementById('closureSel').value='all';}]); }
     if(state.week!=='all'){ const lbl=state.week==='unscheduled'?'Unscheduled':state.week.replace('-',' '); chips.push(['Plan week: '+lbl,()=>{state.week='all';document.getElementById('weekSel').value='all';}]); }
-    if(state.material!=='all'){ const lbl={grn_pending:'GRN pending',grn_done:'GRN done',delivered_june:'Delivered in June',delivered:'Material delivered',partial:'Material partial',mat_pending:'Material pending'}[state.material]; chips.push([lbl,()=>{state.material='all';document.getElementById('materialSel').value='all';}]); }
+    if(state.material!=='all'){ const lbl={grn_pending:'GRN pending',grn_done:'GRN done',delivered_june:'Delivered in June',delivered:'Material delivered',partial:'Material partial',mat_pending:'Material pending',unplanned:'Unplanned invoicing'}[state.material]; chips.push([lbl,()=>{state.material='all';document.getElementById('materialSel').value='all';}]); }
     if(state.q) chips.push(['Search: "'+state.q+'"',()=>{state.q='';document.getElementById('search').value='';}]);
     const el=document.getElementById('chiprow');
     el.innerHTML=chips.map((c,i)=>`<span class="chip" data-i="${i}">${c[0]}<span class="x">✕</span></span>`).join('');
@@ -1138,6 +1204,7 @@ window.renderDashboard = function(DATA){
     state.status=b.dataset.status; syncStatusSeg(); render();
   });
   rsel.onchange=()=>{state.region=rsel.value;render();};
+  pmsel.onchange=()=>{state.pm=pmsel.value;render();};
   msel.onchange=()=>{state.month=msel.value;render();};
   document.getElementById('stageSel').onchange=e=>{state.stage=e.target.value;render();};
   document.getElementById('closureSel').onchange=e=>{state.closure=e.target.value;render();};
@@ -1146,8 +1213,8 @@ window.renderDashboard = function(DATA){
   document.getElementById('search').oninput=e=>{state.q=e.target.value;render();};
   imsel.onchange=()=>{state.instMonth=imsel.value;render();};
   document.getElementById('clearBtn').onclick=()=>{
-    Object.assign(state,{status:'all',region:'all',month:'all',stage:'all',closure:'all',week:'all',material:'all',q:'',_pipe:null,_close:null});
-    rsel.value='all';msel.value='all';document.getElementById('stageSel').value='all';
+    Object.assign(state,{status:'all',region:'all',pm:'all',month:'all',stage:'all',closure:'all',week:'all',material:'all',q:'',_pipe:null,_close:null});
+    rsel.value='all';pmsel.value='all';msel.value='all';document.getElementById('stageSel').value='all';
     document.getElementById('closureSel').value='all';document.getElementById('weekSel').value='all';
     document.getElementById('materialSel').value='all';document.getElementById('search').value='';
     syncStatusSeg(); render();
