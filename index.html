@@ -874,19 +874,31 @@ window.renderDashboard = function(DATA){
 
     // ---- W-o-W summary table ----
     function deltaCell(d){ const neg=d<0; return `<td class="num" style="${neg?'background:var(--rose-soft);color:var(--rose);font-weight:600':'color:var(--green)'}">${neg?'':'+'}${inr(d)}</td>`; }
-    let invW={}, invTotT=0, invTotA=0;
-    WEEKS.forEach(wk=>{ const s=rows.filter(r=>r.plan_week===wk); const wt=sum(s,'june_inv_target'),wa=sum(s,'live_june_inv'); invW[wk]={t:wt,a:wa}; invTotT+=wt; invTotA+=wa; });
+    // determine current June week (7-day buckets); if not June, treat all weeks as elapsed
+    const now=new Date();
+    let curWeek=4;
+    if(now.getFullYear()===2026 && now.getMonth()===5){ const d=now.getDate(); curWeek = d<=7?1:d<=14?2:d<=21?3:4; }
+    const weekNum=wk=>parseInt(wk.split('-')[1],10);
+    let invW={};
+    WEEKS.forEach(wk=>{ const s=rows.filter(r=>r.plan_week===wk); invW[wk]={t:sum(s,'june_inv_target'),a:sum(s,'live_june_inv')}; });
+    // MTD = weeks up to and including current week
+    let mtdT=0, mtdA=0;
+    WEEKS.forEach(wk=>{ if(weekNum(wk)<=curWeek){ mtdT+=invW[wk].t; mtdA+=invW[wk].a; } });
+    const fullT=WEEKS.reduce((a,wk)=>a+invW[wk].t,0);
     const collTt=sum(rows,'june_coll_target'), collAa=sum(rows,'live_june_coll');
-    const invHead=`<tr><th></th>${WEEKS.map(w=>`<th colspan="3" style="text-align:center;border-left:1px solid var(--line)">${w.replace('-',' ')}</th>`).join('')}<th colspan="3" style="text-align:center;border-left:2px solid var(--amber)">MTD total</th></tr>`;
+
+    const invHead=`<tr><th></th>${WEEKS.map(w=>{const future=weekNum(w)>curWeek;return `<th colspan="3" style="text-align:center;border-left:1px solid var(--line);${future?'opacity:.45':''}">${w.replace('-',' ')}${weekNum(w)===curWeek?' <span style="color:var(--amber);font-size:9px">●LIVE</span>':''}</th>`;}).join('')}<th colspan="3" style="text-align:center;border-left:2px solid var(--amber)">MTD to date</th></tr>`;
     const subHead=`<tr><th></th>${WEEKS.map(()=>`<th class="num" style="border-left:1px solid var(--line)">Tgt</th><th class="num">Ach</th><th class="num">Δ</th>`).join('')}<th class="num" style="border-left:2px solid var(--amber)">Tgt</th><th class="num">Ach</th><th class="num">Δ</th></tr>`;
-    const invRow=`<tr><td style="font-weight:600">Invoicing</td>${WEEKS.map(w=>{const x=invW[w];return `<td class="num" style="border-left:1px solid var(--line)">${inr(x.t)}</td><td class="num">${inr(x.a)}</td>`+deltaCell(x.a-x.t);}).join('')}<td class="num" style="border-left:2px solid var(--amber)">${inr(invTotT)}</td><td class="num">${inr(invTotA)}</td>`+deltaCell(invTotA-invTotT)+`</tr>`;
+    const invRow=`<tr><td style="font-weight:600">Invoicing</td>${WEEKS.map(w=>{const x=invW[w];const future=weekNum(w)>curWeek;const fop=future?'opacity:.45':'';return `<td class="num" style="border-left:1px solid var(--line);${fop}">${inr(x.t)}</td><td class="num" style="${fop}">${inr(x.a)}</td>`+(future?`<td class="num" style="opacity:.45">${inr(x.a-x.t)}</td>`:deltaCell(x.a-x.t));}).join('')}<td class="num" style="border-left:2px solid var(--amber)">${inr(mtdT)}</td><td class="num">${inr(mtdA)}</td>`+deltaCell(mtdA-mtdT)+`</tr>`;
+
+    const weekLabel=['','Week 1','Week 2','Week 3','Week 4'][curWeek];
     document.getElementById('wowSummary').innerHTML=
       `<div class="kpis" style="margin-bottom:14px">
-        ${kpiCard('Invoicing MTD','<span style="font-size:18px">'+inr(invTotA)+' / '+inr(invTotT)+'</span>',(invTotT>0?Math.round(invTotA/invTotT*100):0)+'% achieved · Δ '+inr(invTotA-invTotT),'a-amber')}
+        ${kpiCard('Invoicing — due by '+weekLabel,'<span style="font-size:18px">'+inr(mtdA)+' / '+inr(mtdT)+'</span>',(mtdT>0?Math.round(mtdA/mtdT*100):0)+'% of to-date target · Δ '+inr(mtdA-mtdT),'a-amber')}
         ${kpiCard('Collection MTD','<span style="font-size:18px">'+inr(collAa)+' / '+inr(collTt)+'</span>',(collTt>0?Math.round(collAa/collTt*100):0)+'% achieved · Δ '+inr(collAa-collTt),'a-green')}
       </div>
       <div class="tablecard"><div class="tscroll"><table class="wowtab"><thead>${invHead}${subHead}</thead><tbody>${invRow}</tbody></table></div></div>
-      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:8px">Weekly target from each project's planned invoicing week. Collection has no weekly targets in the sheet, so it's shown as MTD only above. Negative deltas (behind target) in red.</div>`;
+      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:8px">MTD to date = weeks through ${weekLabel} (current). Full-month invoicing target is ${inr(fullT)}. Future weeks dimmed. Collection has no weekly targets in the sheet (shown as full MTD above). Negative deltas in red.</div>`;
 
     // ---- unplanned invoicing ----
     const unpl=rows.filter(r=>r.live_june_inv>0 && !r.is_planned_june);
