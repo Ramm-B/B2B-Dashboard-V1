@@ -230,6 +230,39 @@
   .errcard .eh{font-size:12.5px;color:var(--ink-dim);line-height:1.5}
   .errcard button{margin-top:16px;background:var(--amber);color:#1a1206;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)}
 
+  /* ---- project detail modal ---- */
+  .pmodal-backdrop{position:fixed;inset:0;background:rgba(8,10,14,.72);backdrop-filter:blur(4px);
+    display:none;align-items:flex-start;justify-content:center;z-index:80;padding:40px 18px;overflow-y:auto}
+  .pmodal-backdrop.open{display:flex}
+  .pmodal{background:var(--panel);border:1px solid var(--line);border-radius:18px;max-width:860px;width:100%;
+    position:relative;box-shadow:0 24px 70px rgba(0,0,0,.5);animation:pmIn .18s ease}
+  @keyframes pmIn{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}
+  .pmodal-close{position:absolute;top:16px;right:16px;background:var(--panel-2);border:1px solid var(--line);
+    color:var(--ink-dim);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:14px;z-index:2;transition:.15s}
+  .pmodal-close:hover{color:var(--ink);border-color:var(--rose)}
+  .pm-head{padding:24px 26px 18px;border-bottom:1px solid var(--line)}
+  .pm-id{font-family:var(--mono);font-size:12px;color:var(--amber);letter-spacing:.02em}
+  .pm-name{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:5px 0 10px;line-height:1.25;padding-right:40px}
+  .pm-tags{display:flex;gap:8px;flex-wrap:wrap}
+  .pm-tag{font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:20px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink-dim)}
+  .pm-tag b{color:var(--ink);font-weight:600}
+  .pm-body{padding:20px 26px 26px}
+  .pm-hero{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+  .pm-hcard{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:14px 15px}
+  .pm-hcard .h-l{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);font-family:var(--mono)}
+  .pm-hcard .h-v{font-size:21px;font-weight:680;letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums}
+  .pm-hcard .h-s{font-size:11px;color:var(--ink-dim);font-family:var(--mono);margin-top:4px}
+  .pm-sec{margin-top:20px}
+  .pm-sec-t{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);font-family:var(--mono);margin-bottom:11px;display:flex;align-items:center;gap:9px}
+  .pm-sec-t::after{content:"";flex:1;height:1px;background:var(--line)}
+  .pm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 26px}
+  .pm-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .pm-row .r-k{font-size:12.5px;color:var(--ink-dim)}
+  .pm-row .r-v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  .pm-bar{height:8px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden;margin:8px 0 4px}
+  .pm-bar > i{display:block;height:100%}
+  @media(max-width:680px){ .pm-hero{grid-template-columns:1fr} .pm-grid{grid-template-columns:1fr} }
+
   .hide{display:none!important}
   @media(max-width:980px){
     .kpis{grid-template-columns:repeat(2,1fr)}
@@ -498,6 +531,13 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     <div class="em" id="errMsg">—</div>
     <div class="eh" id="errHint">—</div>
     <button id="retryBtn">Try again</button>
+  </div>
+</div>
+
+<div class="pmodal-backdrop" id="pmodalBackdrop">
+  <div class="pmodal" id="pmodal" role="dialog" aria-modal="true">
+    <button class="pmodal-close" id="pmodalClose" aria-label="Close">✕</button>
+    <div id="pmodalBody"></div>
   </div>
 </div>
 
@@ -1154,9 +1194,12 @@ window.renderDashboard = function(DATA){
       if(typeof x==='string'||typeof y==='string'){x=(''+x).toLowerCase();y=(''+y).toLowerCase();}
       return x<y?-dir:x>y?dir:0; });
     document.getElementById('tbody').innerHTML=sorted.map(r=>
-      '<tr>'+cols.map(c=>`<td class="${c[3]==='num'?'num':''}">${c[2](r)}</td>`).join('')+'</tr>').join('');
+      `<tr data-sseid="${r.sseid}" style="cursor:pointer">`+cols.map(c=>`<td class="${c[3]==='num'?'num':''}">${c[2](r)}</td>`).join('')+'</tr>').join('');
     document.getElementById('emptyState').style.display=sorted.length?'none':'block';
     document.getElementById('tcount').textContent=sorted.length+' shown';
+    // row click -> project detail modal
+    const byId={}; sorted.forEach(r=>byId[r.sseid]=r);
+    document.querySelectorAll('#tbody tr').forEach(tr=>{ tr.onclick=()=>openProjectModal(byId[tr.dataset.sseid]); });
     document.querySelectorAll('#theadRow th').forEach(th=>{
       const active=th.dataset.k===k; th.dataset.active=active?'true':'false';
       const ar=th.querySelector('.arrow'); if(ar)ar.textContent=active?(dir>0?'▴':'▾'):'▾';
@@ -1165,6 +1208,86 @@ window.renderDashboard = function(DATA){
         renderTable(tableRows()); };
     });
   }
+
+  // ---------- project detail modal ----------
+  function pctBar(done,total,colorVar){
+    const p=total>0?Math.min(done/total*100,100):0;
+    return `<div class="pm-bar"><i style="width:${p}%;background:${colorVar}"></i></div>`;
+  }
+  function row(k,v){ return `<div class="pm-row"><span class="r-k">${k}</span><span class="r-v">${v}</span></div>`; }
+  function openProjectModal(r){
+    if(!r) return;
+    const invPct=r.booking>0?Math.round(r.invoicing/r.booking*100):0;
+    const collPct=r.booking>0?Math.round(r.collection/r.booking*100):0;
+    const invPend=Math.max(r.inv_pending,0), collPend=Math.max(r.coll_pending,0);
+    const stagePill=`<span class="stagepill ${STAGE_CLASS[r.stage]||'sp-not'}">${r.stage}</span>`;
+
+    // Material / June block only when relevant
+    let juneBlock='';
+    if(r.june_inv_target>0 || r.is_lot_ms || (r.milestone&&r.milestone!=='—') || r.live_june_inv>0 || r.june_coll_net>0){
+      juneBlock=`<div class="pm-sec"><div class="pm-sec-t">June tracker</div><div class="pm-grid">
+        ${row('Milestone', (r.milestone&&r.milestone!=='—')?milestonePill(r.milestone):'<span class="muted">—</span>')}
+        ${row('Planned week', r.plan_week?r.plan_week.replace('-',' '):'<span class="muted">—</span>')}
+        ${row('June inv target', r.june_inv_target>0?inr(r.june_inv_target):'<span class="muted">—</span>')}
+        ${row('June inv actual', r.live_june_inv>0?inr(r.live_june_inv):'<span class="muted">—</span>')}
+        ${row('June coll target', r.june_coll_target>0?inr(r.june_coll_target):'<span class="muted">—</span>')}
+        ${row('June collected (net)', r.june_coll_net?inr(r.june_coll_net):'<span class="muted">—</span>')}
+        ${r.is_lot_ms?row('LOT 1 delivery', fdate(r.lot1_date)):''}
+        ${r.is_lot_ms?row('LOT 2 delivery', fdate(r.lot2_date)):''}
+        ${r.is_lot_ms?row('Material', materialPill(r)):''}
+      </div></div>`;
+    }
+
+    document.getElementById('pmodalBody').innerHTML=
+      `<div class="pm-head">
+        <div class="pm-id">${r.sseid}${r.type?' · '+r.type:''}</div>
+        <div class="pm-name">${r.name||'—'}</div>
+        <div class="pm-tags">
+          ${statusBadge(r.status)}
+          <span class="pm-tag">📍 <b>${r.region||'—'}</b>${r.city?' · '+r.city:''}</span>
+          <span class="pm-tag">👤 PM <b>${r.pm||'Unassigned'}</b></span>
+          <span class="pm-tag">⚡ <b>${num(r.capacity,1)}</b> kWp</span>
+          ${r.booking_month?`<span class="pm-tag">Booked <b>${r.booking_month}</b></span>`:''}
+        </div>
+      </div>
+      <div class="pm-body">
+        <div class="pm-hero">
+          <div class="pm-hcard"><div class="h-l">Total Project Cost</div><div class="h-v">${inr(r.booking)}</div><div class="h-s">${r.booking_gst?inr(r.booking_gst)+' incl. GST':'excl. GST'}</div></div>
+          <div class="pm-hcard"><div class="h-l">Invoiced</div><div class="h-v">${inr(r.invoicing)}</div>${pctBar(r.invoicing,r.booking,'var(--teal)')}<div class="h-s">${invPct}% · ${inr(invPend)} pending</div></div>
+          <div class="pm-hcard"><div class="h-l">Collected</div><div class="h-v">${inr(r.collection)}</div>${pctBar(r.collection,r.booking,'var(--violet)')}<div class="h-s">${collPct}% · ${inr(collPend)} pending</div></div>
+        </div>
+
+        <div class="pm-sec"><div class="pm-sec-t">Financials</div><div class="pm-grid">
+          ${row('Total project cost', inr(r.booking))}
+          ${row('Booking incl. GST', r.booking_gst?inr(r.booking_gst):'<span class="muted">—</span>')}
+          ${row('Invoiced to date', inr(r.invoicing))}
+          ${row('Invoicing pending', invPend>0?`<span style="color:var(--amber)">${inr(invPend)}</span>`:inr(0))}
+          ${row('Collected to date', inr(r.collection))}
+          ${row('Collection pending', collPend>0?`<span style="color:var(--rose)">${inr(collPend)}</span>`:inr(0))}
+        </div></div>
+
+        <div class="pm-sec"><div class="pm-sec-t">Delivery timeline</div><div class="pm-grid">
+          ${row('Current stage', stagePill)}
+          ${row('Booking date', fdate(r.date_booking))}
+          ${row('Design approval', fdate(r.date_design))}
+          ${row('Install', fdate(r.date_install))}
+          ${row('Commission', fdate(r.date_commission))}
+        </div></div>
+
+        <div class="pm-sec"><div class="pm-sec-t">Closure</div><div class="pm-grid">
+          ${row('QHSE / PP audit', qhseCell(r))}
+          ${row('HOTO 3 date', fdate(r.hoto_date))}
+          ${row('HOTO 3 status', r.hoto_done?'<span class="st ok"><i></i>Done</span>':'<span class="st no"><i></i>Pending</span>')}
+        </div></div>
+
+        ${juneBlock}
+      </div>`;
+    document.getElementById('pmodalBackdrop').classList.add('open');
+  }
+  function closeProjectModal(){ document.getElementById('pmodalBackdrop').classList.remove('open'); }
+  document.getElementById('pmodalClose').onclick=closeProjectModal;
+  document.getElementById('pmodalBackdrop').onclick=(e)=>{ if(e.target.id==='pmodalBackdrop') closeProjectModal(); };
+  document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') closeProjectModal(); });
 
   // ---------- which rows feed the table (view-aware) ----------
   function tableRows(){
