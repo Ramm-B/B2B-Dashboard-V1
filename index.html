@@ -275,7 +275,7 @@
 <script>
 /* ============================================================
    LIVE DATA LAYER v2  —  27-column structure
-   Adds: Booking month, Planned Invoicing Week, June Collection
+   Adds: Booking month, Planned Invoicing Week, Aug Collection
    target, QHSE_Final Audit_PP (status), HOTO 3 date.
    ============================================================ */
 window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZS7ST6u5M_Rh0qTE2nOJ0a1cptqyOqO7PcgnvSzvgGtVypgJLeCAc9r5WGvFR648JC6e2w7e/pub?gid=174254446&single=true&output=csv";
@@ -355,17 +355,17 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     idx.booking=find('Booking');
     idx.booking_gst=find('Booking(GST)');
     idx.invoicing=find('Invoicing');
-    idx.june_target=find('June Invoicing Target');
-    idx.milestone=find('June invoicing Milestone');
+    idx.june_target=find('Aug Invoicing Target');
+    idx.milestone=find('Aug Invoicing  Milestone'); if(idx.milestone===-1) idx.milestone=find('Aug Invoicing Milestone');
     idx.lot1=find('LOT 1 Delivery');
     idx.lot2=find('LOT 2 Delivery');
     idx.plan_week=find('Planned Invoicing Week');
-    idx.live_inv=find('Live for June (Invoicing)');
+    idx.live_inv=find('Live for Aug (Invoicing)');
     idx.inv_pending=find('Pending');                        // first Pending (invoicing)
     idx.inv_pending_pct=find('% Pending');
     idx.collection=find('Collection Till date');
-    idx.june_coll_target=find('June Collection target');
-    idx.live_coll=find('Live for June (Collection)');
+    idx.june_coll_target=find('Aug Collection target');
+    idx.live_coll=find('Live for Aug (Collection)');
     idx.coll_pending=find('Pending', idx.collection);       // Pending after collection
     idx.coll_pending_pct=find('% Pending', idx.collection);
     idx.date_design=find('Design Approval');
@@ -450,8 +450,8 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
         else {materialDelivered=false;materialStatus='pending';}
       }
       // June-specific: was any LOT delivered in June 2026?
-      function isJune(d){ return d && d.slice(0,7)==='2026-06'; }
-      const deliveredInJune = isLotMs && (isJune(lot1)||isJune(lot2));
+      function isDelivMonth(d){ return d && d.slice(0,7)==='2026-08'; }
+      const deliveredInJune = isLotMs && (isDelivMonth(lot1)||isDelivMonth(lot2));
       // GRN pending = delivered in June AND June invoicing actual = 0
       const grnPending = deliveredInJune && juneInvActual<=0;
       const grnDone = deliveredInJune && juneInvActual>0;
@@ -571,7 +571,7 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
   <div class="viewtabs" id="viewtabs">
     <button data-view="overview" aria-pressed="true">Overview</button>
     <button data-view="pipeline">Delivery Pipeline</button>
-    <button data-view="june">June Tracker</button>
+    <button data-view="june">August Tracker</button>
     <button data-view="month">Month Explorer</button>
     <button data-view="closure">Closure (QHSE / HOTO)</button>
   </div>
@@ -611,9 +611,9 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     </select>
     <select id="materialSel">
       <option value="all">Any material state</option>
-      <option value="grn_pending">GRN pending (June delivery, no June invoice)</option>
-      <option value="grn_done">GRN done (June delivery, invoiced)</option>
-      <option value="delivered_june">Delivered in June</option>
+      <option value="grn_pending">GRN pending (Aug delivery, no Aug invoice)</option>
+      <option value="grn_done">GRN done (Aug delivery, invoiced)</option>
+      <option value="delivered_june">Delivered in August</option>
       <option value="delivered">Material fully delivered</option>
       <option value="partial">Material partially delivered</option>
       <option value="mat_pending">Material pending</option>
@@ -654,10 +654,10 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     <div class="funnel" id="funnel2"></div>
   </div>
 
-  <!-- ================= JUNE TRACKER ================= -->
+  <!-- ================= AUGUST TRACKER ================= -->
   <div id="view-june" class="hide">
     <div class="kpis" id="juneKpis"></div>
-    <div class="section-title">June invoicing — week-wise target vs actual</div>
+    <div class="section-title">August invoicing — week-wise target vs actual</div>
     <div class="weekgrid" id="weekgrid"></div>
     <div class="section-title">Week-over-week summary — target vs achieved</div>
     <div id="wowSummary"></div>
@@ -665,7 +665,7 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
     <div class="row2">
       <div class="card">
         <h3>Milestone breakdown</h3>
-        <div class="hint">June-targeted projects grouped by invoicing milestone</div>
+        <div class="hint">August-targeted projects grouped by invoicing milestone</div>
         <div id="msBreakdown"></div>
       </div>
       <div class="card">
@@ -674,16 +674,16 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
         <div id="matBreakdown"></div>
       </div>
     </div>
-    <div class="section-title">Unplanned invoicing — done in June, not planned</div>
+    <div class="section-title">Unplanned invoicing — done in August, not planned</div>
     <div class="card" id="unplannedCard"></div>
     <div class="row2">
       <div class="card">
-        <h3>June Invoicing — overall</h3>
+        <h3>August Invoicing — overall</h3>
         <div class="hint">Actual invoiced this month vs target</div>
         <div id="juneInvOverall"></div>
       </div>
       <div class="card">
-        <h3>June Collection — overall</h3>
+        <h3>August Collection — overall</h3>
         <div class="hint">Actual collected this month vs target</div>
         <div id="juneCollOverall"></div>
       </div>
@@ -908,10 +908,10 @@ window.renderDashboard = function(DATA){
     const cact = anyFilter ? sum(rows,'june_coll_net') : ((DATA.collTotal!=null)?DATA.collTotal:sum(rows,'june_coll_net'));
     const pct=tgt>0?(act/tgt*100):0, cpct=ctgt>0?(cact/ctgt*100):0;
     document.getElementById('juneKpis').innerHTML=
-      kpiCard('June Inv Target',inr(tgt),rows.filter(r=>r.june_inv_target>0).length+' projects targeted','a-rose')+
-      kpiCard('June Inv Actual',inr(act),pct.toFixed(1)+'% of target','a-teal')+
-      kpiCard('June Coll Target',inr(ctgt),rows.filter(r=>r.june_coll_target>0).length+' projects targeted','a-blue')+
-      kpiCard('June Coll Actual',inr(cact),ctgt>0?cpct.toFixed(1)+'% of target':'—','a-green');
+      kpiCard('Aug Inv Target',inr(tgt),rows.filter(r=>r.june_inv_target>0).length+' projects targeted','a-rose')+
+      kpiCard('Aug Inv Actual',inr(act),pct.toFixed(1)+'% of target','a-teal')+
+      kpiCard('Aug Coll Target',inr(ctgt),rows.filter(r=>r.june_coll_target>0).length+' projects targeted','a-blue')+
+      kpiCard('Aug Coll Actual',inr(cact),ctgt>0?cpct.toFixed(1)+'% of target':'—','a-green');
 
     // week-wise
     const grid=WEEKS.map(wk=>{
@@ -945,7 +945,7 @@ window.renderDashboard = function(DATA){
     // determine current June week (7-day buckets); if not June, treat all weeks as elapsed
     const now=new Date();
     let curWeek=4;
-    if(now.getFullYear()===2026 && now.getMonth()===5){ const d=now.getDate(); curWeek = d<=7?1:d<=14?2:d<=21?3:4; }
+    if(now.getFullYear()===2026 && now.getMonth()===7){ const d=now.getDate(); curWeek = d<=7?1:d<=14?2:d<=21?3:4; }
     const weekNum=wk=>parseInt(wk.split('-')[1],10);
     let invW={};
     WEEKS.forEach(wk=>{ const s=rows.filter(r=>r.plan_week===wk); invW[wk]={t:sum(s,'june_inv_target'),a:sum(s,'live_june_inv')}; });
@@ -984,14 +984,14 @@ window.renderDashboard = function(DATA){
         ${kpiCard('Collection — to date','<span style="font-size:18px">'+inr(collMtdA)+' / '+inr(collTt)+'</span>',(collTt>0?Math.round(collMtdA/collTt*100):0)+'% of month target · Δ '+inr(collMtdA-collTt),'a-green')}
       </div>
       <div class="tablecard"><div class="tscroll"><table class="wowtab"><thead>${invHead}${subHead}</thead><tbody>${invRow}${collRow}</tbody></table></div></div>
-      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:8px">Invoicing MTD = weeks through ${weekLabel} (current); full-month target ${inr(fullT)}. Collection weekly = net receipts from the June collection log (after cheque returns); total ${inr(collTotalActual)} for June. Collection has no per-week target in the sheet, so weekly Tgt/Δ show "—" and the month target (${inr(collTt)}) is compared against to-date actual. Future weeks dimmed; negative deltas in red.</div>`;
+      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:8px">Invoicing MTD = weeks through ${weekLabel} (current); full-month target ${inr(fullT)}. Collection weekly = net receipts from the August collection log (after cheque returns); total ${inr(collTotalActual)} for August. Collection has no per-week target in the sheet, so weekly Tgt/Δ show "—" and the month target (${inr(collTt)}) is compared against to-date actual. Future weeks dimmed; negative deltas in red.</div>`;
 
     // ---- unplanned invoicing ----
     const unpl=rows.filter(r=>r.live_june_inv>0 && !r.is_planned_june);
     const upT=sum(unpl,'live_june_inv');
     const pressed=state.material==='unplanned';
     document.getElementById('unplannedCard').innerHTML=
-      `<h3>Unplanned invoicing <span style="font-family:var(--mono);font-size:12px;color:var(--ink-faint);font-weight:400">— invoiced in June with no target/milestone</span></h3>
+      `<h3>Unplanned invoicing <span style="font-family:var(--mono);font-size:12px;color:var(--ink-faint);font-weight:400">— invoiced in August with no target/milestone</span></h3>
        <div style="display:flex;gap:22px;align-items:baseline;flex-wrap:wrap;margin:12px 0 14px">
          <div><span style="font-size:28px;font-weight:680;letter-spacing:-.02em">${unpl.length}</span> <span style="color:var(--ink-dim);font-size:13px">projects</span></div>
          <div><span style="font-size:22px;font-weight:650">${inr(upT)}</span> <span style="color:var(--ink-dim);font-size:13px">invoiced</span></div>
@@ -1030,13 +1030,13 @@ window.renderDashboard = function(DATA){
         <div class="matbox${matSel('delivered')}" style="border-left-color:var(--teal)" data-mat="delivered"><div class="mb-n">${deliv.length}</div><div class="mb-l">Fully delivered</div><div class="mb-s">both LOTs in (overall)</div></div>
         <div class="matbox${matSel('partial')}" style="border-left-color:var(--amber)" data-mat="partial"><div class="mb-n">${part.length}</div><div class="mb-l">Partial</div><div class="mb-s">one LOT in</div></div>
         <div class="matbox${matSel('pending')}" style="border-left-color:var(--rose)" data-mat="pending"><div class="mb-n">${pend.length}</div><div class="mb-l">Pending</div><div class="mb-s">no LOT yet</div></div>
-        <div class="matbox${matSel('junedeliv')}" style="border-left-color:var(--violet)" data-mat="junedeliv"><div class="mb-n">${juneDeliv.length}</div><div class="mb-l">Delivered in June</div><div class="mb-s">a LOT moved this month</div></div>
+        <div class="matbox${matSel('junedeliv')}" style="border-left-color:var(--violet)" data-mat="junedeliv"><div class="mb-n">${juneDeliv.length}</div><div class="mb-l">Delivered in August</div><div class="mb-s">a LOT moved this month</div></div>
       </div>
       <div class="matgrid" style="margin-top:10px">
-        <div class="matbox${matSel('grn')}" style="border-left-color:var(--rose);background:var(--rose-soft)" data-mat="grn"><div class="mb-n">${grn.length}</div><div class="mb-l">GRN pending</div><div class="mb-s">June delivery, ₹0 June invoice</div></div>
-        <div class="matbox${matSel('grndone')}" style="border-left-color:var(--green)" data-mat="grndone"><div class="mb-n">${grnDone.length}</div><div class="mb-l">GRN done</div><div class="mb-s">June delivery, invoiced in June</div></div>
+        <div class="matbox${matSel('grn')}" style="border-left-color:var(--rose);background:var(--rose-soft)" data-mat="grn"><div class="mb-n">${grn.length}</div><div class="mb-l">GRN pending</div><div class="mb-s">Aug delivery, ₹0 Aug invoice</div></div>
+        <div class="matbox${matSel('grndone')}" style="border-left-color:var(--green)" data-mat="grndone"><div class="mb-n">${grnDone.length}</div><div class="mb-l">GRN done</div><div class="mb-s">Aug delivery, invoiced in Aug</div></div>
       </div>
-      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:11px">${juneDeliv.length} projects had material delivered in June · click any box to filter</div>`;
+      <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:11px">${juneDeliv.length} projects had material delivered in August · click any box to filter</div>`;
     const matMap={delivered:'delivered',partial:'partial',pending:'mat_pending',junedeliv:'delivered_june',grn:'grn_pending',grndone:'grn_done'};
     document.querySelectorAll('#matBreakdown .matbox').forEach(el=>{ el.style.cursor='pointer'; el.onclick=()=>{
       const target=matMap[el.dataset.mat];
@@ -1225,7 +1225,7 @@ window.renderDashboard = function(DATA){
     // Material / June block only when relevant
     let juneBlock='';
     if(r.june_inv_target>0 || r.is_lot_ms || (r.milestone&&r.milestone!=='—') || r.live_june_inv>0 || r.june_coll_net>0){
-      juneBlock=`<div class="pm-sec"><div class="pm-sec-t">June tracker</div><div class="pm-grid">
+      juneBlock=`<div class="pm-sec"><div class="pm-sec-t">August tracker</div><div class="pm-grid">
         ${row('Milestone', (r.milestone&&r.milestone!=='—')?milestonePill(r.milestone):'<span class="muted">—</span>')}
         ${row('Planned week', r.plan_week?r.plan_week.replace('-',' '):'<span class="muted">—</span>')}
         ${row('June inv target', r.june_inv_target>0?inr(r.june_inv_target):'<span class="muted">—</span>')}
@@ -1319,9 +1319,9 @@ window.renderDashboard = function(DATA){
     if(state.view==='pipeline'){ const m={dip:'Design approved · install pending',dap:'Design approval pending',icp:'Installed · commissioning pending',tcp:'Total commissioning pending'}; return state._pipe?m[state._pipe]:'All active projects'; }
     if(state.view==='closure'){ const m={qhse:'QHSE/PP not closed',hoto:'HOTO 3 pending',either:'Any closure pending'}; return state._close?m[state._close]:'Commissioned — any closure pending'; }
     if(state.view==='june'){
-      if(state.week==='unscheduled') return 'Unscheduled June projects';
+      if(state.week==='unscheduled') return 'Unscheduled August projects';
       if(state.week!=='all') return state.week.replace('-',' ')+' — planned projects';
-      return 'June planned projects';
+      return 'August planned projects';
     }
     if(state.view==='month') return 'Installed in selected month';
     return 'All projects';
