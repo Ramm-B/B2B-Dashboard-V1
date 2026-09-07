@@ -482,7 +482,6 @@ window.SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt7isZ
         sep_inv_target:money(row[idx.sep_target]),
         live_sep_coll:money(row[idx.live_coll]),
         sep_coll_target:money(row[idx.sep_coll_target]),
-         sep_coll_planned:money(row[idx.sep_coll_planned]),
         plan_week:normWeek(row[idx.plan_week]),
         milestone:milestone||'—',
         lot1_date:lot1,
@@ -918,7 +917,7 @@ window.renderDashboard = function(DATA){
       kpiCard('Sep Inv Target',inr(tgt),rows.filter(r=>r.sep_inv_target>0).length+' projects targeted','a-rose')+
       kpiCard('Sep Inv Actual',inr(act),pct.toFixed(1)+'% of target','a-teal')+
       kpiCard('Sep Coll Target',inr(ctgt),rows.filter(r=>r.sep_coll_target>0).length+' projects targeted','a-blue')+
-      kpiCard('Sep Coll Planned',inr(cplan),ctgt>0?(cplan/ctgt*100).toFixed(1)+'% of target':'—','a-blue');
+      kpiCard('Sep Coll Actual',inr(cact),ctgt>0?cpct.toFixed(1)+'% of target':'—','a-green');
 
     // week-wise
     const grid=WEEKS.map(wk=>{
@@ -945,11 +944,7 @@ window.renderDashboard = function(DATA){
         `<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px"><div style="font-size:28px;font-weight:680;letter-spacing:-.02em">${inr(act)}</div><div style="font-family:var(--mono);font-size:12px;color:var(--ink-dim)">of ${inr(tgt)} target</div></div><div class="bar" style="margin-top:12px;height:26px"><div class="seg-done" style="width:${pc}%">${pc>14?Math.round(p)+'%':''}</div><div style="flex:1"></div></div><div class="legend" style="margin-top:11px"><span><i class="dot seg-done"></i>${label} <span class="lg-num">${inr(act)}</span></span><span><i class="dot" style="background:var(--panel-2);border:1px solid var(--line)"></i>Gap <span class="lg-num">${inr(gap)}</span></span></div>`;
     }
     overall('sepInvOverall',tgt,act,'Invoiced');
-    overall('sepCollOverall',ctgt,cplan,'Planned collection');
-     document.getElementById('sepCollAchievement').innerHTML =
-       `<div style="font-size:12px;color:var(--ink-faint);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em">Overall collection achievement</div>`+
-       `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:7px"><div style="font-size:28px;font-weight:680">${inr(cact)}</div><div style="font-family:var(--mono);font-size:12px;color:var(--ink-dim)">${ctgt>0?cpct.toFixed(1)+'% of Sep target':'—'}</div></div>`+
-       `<div class="bar" style="margin-top:10px;height:8px"><div class="seg-done-c" style="width:${Math.min(cpct,100)}%"></div></div>`;
+    overall('sepCollOverall',ctgt,cact,'Collected');
 
     // ---- W-o-W summary table ----
     function deltaCell(d){ const neg=d<0; return `<td class="num" style="${neg?'background:var(--rose-soft);color:var(--rose);font-weight:600':'color:var(--green)'}">${neg?'':'+'}${inr(d)}</td>`; }
@@ -994,8 +989,7 @@ window.renderDashboard = function(DATA){
         ${kpiCard('Invoicing — due by '+weekLabel,'<span style="font-size:18px">'+inr(mtdA)+' / '+inr(mtdT)+'</span>',(mtdT>0?Math.round(mtdA/mtdT*100):0)+'% of to-date target · Δ '+inr(mtdA-mtdT),'a-amber')}
         ${kpiCard('Collection — to date','<span style="font-size:18px">'+inr(collMtdA)+' / '+inr(collTt)+'</span>',(collTt>0?Math.round(collMtdA/collTt*100):0)+'% of month target · Δ '+inr(collMtdA-collTt),'a-green')}
       </div>
-      <div id="sepCollAchievement" class="card" style="margin-bottom:14px"></div>
-       <div class="tablecard"><div class="tscroll"><table class="wowtab"><thead>${invHead}${subHead}</thead><tbody>${invRow}${collRow}</tbody></table></div></div>
+      <div class="tablecard"><div class="tscroll"><table class="wowtab"><thead>${invHead}${subHead}</thead><tbody>${invRow}${collRow}</tbody></table></div></div>
       <div style="font-size:11px;color:var(--ink-faint);font-family:var(--mono);margin-top:8px">Invoicing MTD = weeks through ${weekLabel} (current); full-month target ${inr(fullT)}. Collection weekly = net receipts from the September collection log (after cheque returns); total ${inr(collTotalActual)} for September. Collection has no per-week target in the sheet, so weekly Tgt/Δ show "—" and the month target (${inr(collTt)}) is compared against to-date actual. Future weeks dimmed; negative deltas in red.</div>`;
 
     // ---- unplanned invoicing ----
